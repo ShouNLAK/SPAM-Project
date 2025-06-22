@@ -45,12 +45,12 @@ public class IntegratedSalesAssistant {
             System.out.println("|  2. Nhập phiên giao dịch mới                   |");
             System.out.println("|  3. Xem lịch sử giao dịch trong phiên          |");
             System.out.println("|  4. Xem mẫu thường xuyên                       |");
-            System.out.println("|  5. Gợi ý nâng cao                             |");
-            System.out.println("|  6. Khai thác luật kết hợp                     |");
-            System.out.println("|  7. Xem Top-K mẫu tuần tự                      |");
-            System.out.println("|  8. Tóm tắt & trực quan hóa mẫu tuần tự        |");
-            System.out.println("|  9. Truy vấn mẫu tuần tự                       |");
-            System.out.println("| 10. Gợi ý sản phẩm tiếp theo                   |");
+            System.out.println("|  5. Đề xuất sau mua                            |");
+            System.out.println("|  6. Danh sách khuyến mãi                       |");
+            System.out.println("|  7. Khai thác luật kết hợp                     |");
+            System.out.println("|  8. Xem Top-K mẫu tuần tự                      |");
+            System.out.println("|  9. Tóm tắt & trực quan hóa mẫu tuần tự        |");
+            System.out.println("|  10. Truy vấn mẫu tuần tự                      |");
             System.out.println("| -1. Tuỳ chọn nâng cao (minsup, độ dài, ...)    |");
             System.out.println("|  0. Thoát chương trình                         |");
             System.out.println("==================================================");
@@ -65,9 +65,6 @@ public class IntegratedSalesAssistant {
                     String newTrans = nhapPhienGiaoDich(
                         scanner, productMapping, promotionPatterns, historicalFile
                     );
-                    if (!newTrans.isEmpty()) {
-                        sessionHistory.add(newTrans);
-                    }
                     break;
                 case "3":
                     hienThiLichSuPhien(sessionHistory, productMapping);
@@ -76,38 +73,35 @@ public class IntegratedSalesAssistant {
                     hienThiFrequentPatterns(patternFile, productMapping);
                     break;
                 case "5":
-                    System.out.println("\n--- Gợi ý nâng cao ---");
+                    System.out.println("\n--- Đề xuất từ từng item con trong itemset ---");
                     System.out.print("Nhập giao dịch hiện tại (các mã cách nhau bằng dấu cách): ");
                     List<Integer> curr = parseCodes(scanner.nextLine());
-                    List<List<Integer>> currTransaction = List.of(curr); // wrap as one itemset
-                    gợiYenhanced(currTransaction, promotionPatterns, productMapping);
+                    deXuatTuItemsetCon(curr, patternFile, productMapping);
                     break;
                 case "6":
+                    System.out.println("\n--- Danh sách khuyến mãi ---");
+                    showdiscount(promotionPatterns, productMapping);
+                    break;
+                case "7":
                     System.out.println("\n--- KHAI THÁC LUẬT KẾT HỢP ---");
                     sinhAssociationRules(
                         patternFile, historicalFile, productMapping
                     );
                     break;
-                case "7":
+                case "8":
                     System.out.println("\n--- Top-K Mẫu Tuần Tự ---");
                     System.out.print("Nhập K: ");
                     int k = Integer.parseInt(scanner.nextLine().trim());
                     hienThiTopK(patternFile, productMapping, k);
                     break;
-                case "8":
+                case "9":
                     summarizePatterns(patternFile, productMapping);
                     break;
-                case "9":
+                case "10":
                     System.out.println("\n----------- TRUY VẤN MẪU TUẦN TỰ -----------");
                     System.out.print("Nhập chuỗi mã sản phẩm (cách nhau bằng dấu cách): ");
                     List<Integer> querySeq = parseCodes(scanner.nextLine());
                     queryPatterns(patternFile, querySeq, productMapping);
-                    break;
-                case "10":
-                    System.out.println("\n-------- GỢI Ý SẢN PHẨM TIẾP THEO ----------");
-                    System.out.print("Nhập chuỗi mã sản phẩm hiện tại (cách nhau bằng dấu cách): ");
-                    List<Integer> currSeq = parseCodes(scanner.nextLine());
-                    recommendNext(patternFile, currSeq, productMapping);
                     break;
                 case "-1":
                     optionMenu(scanner);
@@ -293,50 +287,11 @@ public class IntegratedSalesAssistant {
                 }
             }
 
-            if (seq.isEmpty() || seq.get(seq.size()-1).isEmpty()) continue;
+            // --- Đề xuất từ từng item con trong itemset vừa nhập ---
+            List<Integer> lastItemset = seq.get(seq.size() - 1);
+            deXuatTuItemsetCon(lastItemset, "sales_patterns.txt", map);
 
-            // Đề xuất tuần tự cho lần mua tiếp theo (dựa vào tất cả các itemset đã mua)
-            Set<Integer> sequentialSuggestions = new LinkedHashSet<>();
-            Set<Integer> allPurchased = new HashSet<>();
-            for (List<Integer> itemset : seq) allPurchased.addAll(itemset);
-            try (BufferedReader br = new BufferedReader(new FileReader("sales_patterns.txt"))) {
-                String pline;
-                while ((pline = br.readLine()) != null) {
-                    pline = pline.trim();
-                    if (pline.isEmpty() || !pline.contains("#SUP:")) continue;
-                    String[] parts = pline.split("#SUP:");
-                    String patternPart = parts[0].trim();
-                    List<List<Integer>> itemsets = new ArrayList<>();
-                    for (String blk : patternPart.split("-1")) {
-                        blk = blk.trim();
-                        if (blk.isEmpty()) continue;
-                        List<Integer> items = new ArrayList<>();
-                        for (String t : blk.split("\\s+")) {
-                            if (!t.isEmpty()) items.add(Integer.parseInt(t));
-                        }
-                        if (!items.isEmpty()) itemsets.add(items);
-                    }
-                    // Đề xuất sản phẩm từ các mẫu tuần tự có itemset đầu hoặc các itemset con là tập con của các lần mua
-                    for (List<Integer> iset : itemsets) {
-                        if (!allPurchased.containsAll(iset)) {
-                            // Nếu iset chưa mua hết, đề xuất các sản phẩm còn thiếu
-                            for (Integer sug : iset) {
-                                if (!allPurchased.contains(sug)) sequentialSuggestions.add(sug);
-                            }
-                        }
-                    }
-                }
-            } catch (IOException e) {
-                System.out.println("Lỗi đọc file pattern: " + e.getMessage());
-            }
-            System.out.println("\n--- Đề xuất cho lần mua tiếp theo ---");
-            if (sequentialSuggestions.isEmpty()) {
-                System.out.println("(Không có gợi ý nào)");
-            } else {
-                System.out.println("Bạn có thể cân nhắc mua tiếp: " +
-                    decodeItemset(new ArrayList<>(sequentialSuggestions), map));
-            }
-            System.out.println("=====================================================================");
+            if (seq.isEmpty() || seq.get(seq.size()-1).isEmpty()) continue;
         }
     }
 
@@ -420,7 +375,8 @@ public class IntegratedSalesAssistant {
     }
 }
 
-    // 6) Sinh luật kết hợp
+    // 6) Đề xuất từ từng item con trong itemset
+    
     // 6) Sinh luật kết hợp
     private static void sinhAssociationRules(
         String patternFile,
@@ -1164,4 +1120,135 @@ private static List<Integer> getMissingItems(List<Integer> combo, List<Integer> 
         }
         return map;
     }
+
+// Thêm hàm mới bên dưới các hàm tiện ích khác:
+private static void deXuatTuItemsetCon(List<Integer> itemset, String patternFile, Map<Integer, String> productMapping) {
+    if (itemset == null || itemset.isEmpty()) {
+        System.out.println("Không có item nào để đề xuất.");
+        return;
+    }
+    Set<Integer> allSuggestions = new LinkedHashSet<>();
+    Set<Integer> alreadyBought = new HashSet<>(itemset);
+
+    // Đọc toàn bộ pattern file vào bộ nhớ
+    List<List<Integer>> patterns = new ArrayList<>();
+    try (BufferedReader br = new BufferedReader(new FileReader(patternFile))) {
+        String line;
+        while ((line = br.readLine()) != null) {
+            line = line.trim();
+            if (line.isEmpty() || !line.contains("#SUP:")) continue;
+            String[] p = line.split("#SUP:");
+            String patt = p[0].replace("-1", "").trim();
+            List<Integer> pattItems = new ArrayList<>();
+            for (String t : patt.split("\\s+")) {
+                try { pattItems.add(Integer.parseInt(t)); } catch (NumberFormatException ex) {}
+            }
+            if (!pattItems.isEmpty()) patterns.add(pattItems);
+        }
+    } catch (IOException e) {
+        System.out.println("Lỗi đọc file mẫu: " + e.getMessage());
+        return;
+    }
+
+    // Với mỗi item con, tìm các pattern bắt đầu bằng item đó
+    for (Integer item : itemset) {
+        for (List<Integer> patt : patterns) {
+            if (patt.size() <= 1) continue;
+            if (patt.get(0).equals(item)) {
+                // Lấy các item tiếp theo (sau item đầu tiên)
+                for (int i = 1; i < patt.size(); i++) {
+                    int sug = patt.get(i);
+                    if (!alreadyBought.contains(sug)) {
+                        allSuggestions.add(sug);
+                    }
+                }
+            }
+        }
+    }
+
+    // Loại bỏ các item đã mua
+    allSuggestions.removeAll(alreadyBought);
+
+    // In kết quả
+    System.out.println("Đề xuất cho itemset " + decodeItemset(itemset, productMapping) + ":");
+    if (allSuggestions.isEmpty()) {
+        System.out.println("(Không có đề xuất nào)");
+    } else {
+        // Sắp xếp theo ID tăng dần
+        List<Integer> sortedSuggestions = new ArrayList<>(allSuggestions);
+        Collections.sort(sortedSuggestions);
+        List<String> names = sortedSuggestions.stream()
+            .map(id -> productMapping.getOrDefault(id, "SP #" + id))
+            .collect(Collectors.toList());
+        System.out.println(String.join(", ", names));
+    }
+}
+
+// Hàm showdiscount: Hiển thị các itemset chỉ có 1 phần tử và các mở rộng của nó trong cùng 1 itemset
+private static void showdiscount(List<PromotionPattern> promotionPatterns, Map<Integer, String> productMapping) {
+    // Đọc lại file pattern để lấy các pattern dạng 1 itemset
+    Map<Integer, Set<Integer>> singleItemExpansions = new LinkedHashMap<>();
+    Set<String> seenCombos = new HashSet<>(); // Để tránh trùng lặp {1,2} và {2,1}
+    try (BufferedReader br = new BufferedReader(new FileReader("sales_patterns.txt"))) {
+        String line;
+        while ((line = br.readLine()) != null) {
+            line = line.trim();
+            if (line.isEmpty() || !line.contains("#SUP:")) continue;
+            String[] parts = line.split("#SUP:");
+            String patternPart = parts[0].trim();
+            String[] itemsetBlocks = patternPart.split("-1");
+            // Chỉ xét pattern có đúng 1 itemset
+            List<Integer> items = new ArrayList<>();
+            int nonEmptyBlockCount = 0;
+            for (String blk : itemsetBlocks) {
+                blk = blk.trim();
+                if (blk.isEmpty()) continue;
+                nonEmptyBlockCount++;
+                for (String t : blk.split("\\s+")) {
+                    if (!t.isEmpty()) items.add(Integer.parseInt(t));
+                }
+            }
+            if (nonEmptyBlockCount == 1 && items.size() >= 1) {
+                Collections.sort(items);
+                if (items.size() == 1) {
+                    int single = items.get(0);
+                    singleItemExpansions.putIfAbsent(single, new LinkedHashSet<>());
+                }
+                if (items.size() > 1) {
+                    // Chỉ xét cặp (a, b) với a < b để tránh trùng lặp
+                    for (int i = 0; i < items.size(); i++) {
+                        int base = items.get(i);
+                        for (int j = 0; j < items.size(); j++) {
+                            int ext = items.get(j);
+                            if (base < ext) {
+                                singleItemExpansions.putIfAbsent(base, new LinkedHashSet<>());
+                                singleItemExpansions.get(base).add(ext);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } catch (IOException e) {
+        System.out.println("Lỗi đọc file sales_patterns.txt: " + e.getMessage());
+        return;
+    }
+
+    System.out.println("=== Danh sách khuyến mãi mở rộng từ từng sản phẩm ===");
+    boolean found = false;
+    for (Map.Entry<Integer, Set<Integer>> entry : singleItemExpansions.entrySet()) {
+        int base = entry.getKey();
+        Set<Integer> exts = entry.getValue();
+        if (!exts.isEmpty()) {
+            found = true;
+            String baseName = productMapping.getOrDefault(base, "SP #" + base);
+            List<String> extNames = new ArrayList<>();
+            for (int ext : exts) extNames.add(productMapping.getOrDefault(ext, "SP #" + ext));
+            System.out.println("- Nếu mua " + baseName + " có thể mua thêm: " + String.join(", ", extNames));
+        }
+    }
+    if (!found) {
+        System.out.println("(Không có khuyến mãi mở rộng nào)");
+    }
+}
 }
