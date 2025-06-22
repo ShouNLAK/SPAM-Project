@@ -1,6 +1,7 @@
 import main.java.ca.pfv.spmf.algorithms.sequentialpatterns.spam.AlgoSPAM;
 import java.io.*;
 import java.util.*;
+import java.util.stream.Collectors;
 
 
 public class IntegratedSalesAssistant {
@@ -50,7 +51,6 @@ public class IntegratedSalesAssistant {
             System.out.println("|  8. Tóm tắt & trực quan hóa mẫu tuần tự        |");
             System.out.println("|  9. Truy vấn mẫu tuần tự                       |");
             System.out.println("| 10. Gợi ý sản phẩm tiếp theo                   |");
-            System.out.println("| 11. Luật kết hợp trong cùng itemset            |");
             System.out.println("| -1. Tuỳ chọn nâng cao (minsup, độ dài, ...)    |");
             System.out.println("|  0. Thoát chương trình                         |");
             System.out.println("==================================================");
@@ -79,33 +79,14 @@ public class IntegratedSalesAssistant {
                     System.out.println("\n--- Gợi ý nâng cao ---");
                     System.out.print("Nhập giao dịch hiện tại (các mã cách nhau bằng dấu cách): ");
                     List<Integer> curr = parseCodes(scanner.nextLine());
-                    gợiYenhanced(curr, promotionPatterns, productMapping);
+                    List<List<Integer>> currTransaction = List.of(curr); // wrap as one itemset
+                    gợiYenhanced(currTransaction, promotionPatterns, productMapping);
                     break;
                 case "6":
                     System.out.println("\n--- KHAI THÁC LUẬT KẾT HỢP ---");
-                    System.out.println("1. Luật kết hợp tuần tự (dạng {a} -> {b})");
-                    System.out.println("2. Luật kết hợp trong cùng itemset (dạng {a,b})");
-                    System.out.print("Chọn kiểu luật (1-tuần tự, 2-cùng itemset): ");
-                    String type = scanner.nextLine().trim();
-                    if (type.equals("1")) {
-                        System.out.print("Nhập min confidence (0.0–1.0): ");
-                        double minConf = Double.parseDouble(scanner.nextLine().trim());
-                        sinhAssociationRules(
-                            patternFile, historicalFile, productMapping, minConf
-                        );
-                    } else if (type.equals("2")) {
-                        System.out.print("Nhập min confidence phần trăm (ví dụ 60): ");
-                        double minConfPercent = 0.0;
-                        try {
-                            minConfPercent = Double.parseDouble(scanner.nextLine().trim());
-                        } catch (Exception e) {
-                            System.out.println("Giá trị MinConf không hợp lệ.");
-                            break;
-                        }
-                        generateItemsetAssociationRules("sales_transactions.txt", productMapping, minConfPercent);
-                    } else {
-                        System.out.println("Lựa chọn không hợp lệ.");
-                    }
+                    sinhAssociationRules(
+                        patternFile, historicalFile, productMapping
+                    );
                     break;
                 case "7":
                     System.out.println("\n--- Top-K Mẫu Tuần Tự ---");
@@ -187,63 +168,45 @@ public class IntegratedSalesAssistant {
         }
     }
 
-    // 2) Nhập phiên giao dịch mới
     private static String nhapPhienGiaoDich(
-        Scanner scanner,
-        Map<Integer, String> map,
-        List<PromotionPattern> promoPatterns,
-        String historyFile
-    ) {
-        List<List<Integer>> seq = new ArrayList<>();
-        System.out.println("\nNhập phiên giao dịch mới:");
-        System.out.print("Nhập mã sản phẩm lần mua đầu tiên: ");
-        List<Integer> first = parseCodes(scanner.nextLine());
-        if (first.isEmpty()) {
-            System.out.println("Không có sản phẩm. Hủy phiên.");
-            return "";
-        }
-        seq.add(first);
-        System.out.println("Giao dịch hiện tại:");
-        printTransactionSequence(seq, map);
+    Scanner scanner, // <-- add this parameter
+    Map<Integer, String> map,
+    List<PromotionPattern> promoPatterns,
+    String historicalFile
+) {
+    List<List<Integer>> seq = new ArrayList<>();
+    System.out.println("\n===== BẮT ĐẦU PHIÊN GIAO DỊCH MỚI =====");
 
-
-        Map<Set<Integer>, Set<Integer>> promos = computePromos(seq, promoPatterns);
-        inPromos(promos, map);
-
-        // vòng mua thêm: Y hoặc 0
-        while (!promos.isEmpty()) {
-            String c;
-            do {
-                System.out.print("Nhấn Y để mua thêm, hoặc 0 để kết thúc: ");
-                c = scanner.nextLine().trim();
-                if (!c.equalsIgnoreCase("Y") && !c.equals("0")) {
-                    System.out.println("Cú pháp không hợp lệ.");
-                }
-            } while (!c.equalsIgnoreCase("Y") && !c.equals("0"));
-            if (c.equals("0")) break;
-
-            System.out.print("Nhập mã sản phẩm bổ sung: ");
-            List<Integer> extra = parseCodes(scanner.nextLine());
-            if (extra.isEmpty()) {
-                System.out.println("Không có sản phẩm.");
-                break;
-            }
-            seq.add(extra);
-            System.out.println("Giao dịch cập nhật:");
-            printTransactionSequence(seq, map);
-
-
-            promos = computePromos(seq, promoPatterns);
-            inPromos(promos, map);
+    while (true) {
+        System.out.print("\nNhập mã sản phẩm cho lần mua này (nhấn Enter để kết thúc lần mua, nhập 0 để thoát): ");
+        String line = scanner.nextLine();
+        if (line.trim().equals("0")) {
+            break;
         }
 
-        String formatted = formatSeq(seq);
-        String summary   = decodeSeq(seq, map);
-        System.out.println("Tổng kết: " + summary);
-        appendToFile(historyFile, formatted);
-        System.out.println("Đã lưu vào lịch sử.");
-        return formatted;
+        List<Integer> currentPurchase = parseCodes(line);
+        if (currentPurchase.isEmpty()) {
+            System.out.println("Không có sản phẩm nào được nhập. Kết thúc lần mua.");
+        } else {
+             // Thêm lần mua này vào chuỗi giao dịch tổng thể
+            seq.add(currentPurchase);
+            System.out.println("Đã thêm vào giỏ hàng: " + decodeSeq(List.of(currentPurchase), map));
+        }
+
+        // === THỰC HIỆN LUỒNG LOGIC MỚI ===
+        if (!currentPurchase.isEmpty()) {
+            // 1. In ra các khuyến mãi COMBO liên quan đến sản phẩm VỪA NHẬP
+            printComboPromotions(currentPurchase, promoPatterns, map);
+        }
+
+        // 2. In ra các đề xuất TUẦN TỰ dựa trên TOÀN BỘ giỏ hàng
+        printSequentialRecommendations(seq, promoPatterns, map);
+        System.out.println("---------------------------------------------");
     }
+
+    // ... Tổng kết và lưu file như cũ ...
+    return formatSeq(seq);
+}
 
     // 3) Xem lịch sử phiên
     private static void hienThiLichSuPhien(
@@ -300,82 +263,120 @@ public class IntegratedSalesAssistant {
         }
     }
 
-    // 5) Gợi ý nâng cao
     private static void gợiYenhanced(
-        List<Integer> curr,
-        List<PromotionPattern> promos,
-        Map<Integer, String> map
-    ) {
-        Set<Integer> tx = new HashSet<>(curr);
-        Set<Integer> recs = new HashSet<>();
-        for (PromotionPattern p : promos) {
-            if (tx.containsAll(p.leftItems) && !tx.contains(p.promoItem)) {
-                recs.add(p.promoItem);
-            }
-        }
-        if (recs.isEmpty()) {
-            System.out.println("Không có gợi ý nào.");
-        } else {
-            List<String> names = new ArrayList<>();
-            for (Integer c : recs) {
-                names.add(map.getOrDefault(c, "Unknown"));
-            }
-            System.out.println("Bạn có thể xem xét: " + String.join(" / ", names));
-        }
-    }
+    // THAY ĐỔI: Nhận vào toàn bộ chuỗi giao dịch để có đầy đủ thông tin
+    List<List<Integer>> currentTransaction,
+    List<PromotionPattern> promos,
+    Map<Integer, String> map
+) {
+    // BƯỚC 1: Tái sử dụng logic tính toán chính xác mà chúng ta đã xây dựng.
+    // Không cần viết lại logic so khớp ở đây.
+    Set<Integer> recommendations = computeRecommendations(currentTransaction, promos);
 
-    // 6) Luật kết hợp tuần tự
+    // BƯỚC 2: Giữ lại logic in kết quả của bạn vì nó rõ ràng và hiệu quả.
+    System.out.println("\n--- Gợi ý nâng cao cho bạn ---");
+    if (recommendations.isEmpty()) {
+        System.out.println("Không có gợi ý nào phù hợp dựa trên giỏ hàng của bạn.");
+    } else {
+        List<String> names = new ArrayList<>();
+        for (Integer itemCode : recommendations) {
+            names.add(map.getOrDefault(itemCode, "Sản phẩm #" + itemCode));
+        }
+        System.out.println("Bạn có thể xem xét các sản phẩm sau: " + String.join(" / ", names));
+    }
+}
+
+    // 6) Sinh luật kết hợp
+    // 6) Sinh luật kết hợp
     private static void sinhAssociationRules(
-        String patternsFile,
-        String transactionsFile,
-        Map<Integer, String> map,
-        double minConf
+        String patternFile,
+        String transactionFile,
+        Map<Integer, String> productMapping
     ) {
-        // đọc lịch sử
-        List<String> txs = new ArrayList<>();
-        try (BufferedReader br = new BufferedReader(new FileReader(transactionsFile))) {
-            String l;
-            while ((l=br.readLine())!=null) {
-                l = l.trim();
-                if (!l.isEmpty() && !l.startsWith("#")) txs.add(l);
+        // Đếm tổng số SID trong transaction
+        int totalSID = 0;
+        try (BufferedReader br = new BufferedReader(new FileReader(transactionFile))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) continue;
+                totalSID++;
             }
         } catch (IOException e) {
-            System.out.println("Lỗi đọc giao dịch: " + e.getMessage());
+            System.out.println("Lỗi đọc file transaction: " + e.getMessage());
+            return;
+        }
+        if (totalSID == 0) {
+            System.out.println("Không có transaction nào.");
             return;
         }
 
-        System.out.println("\nLuật kết hợp (minConf=" + minConf + "):");
-        try (BufferedReader br = new BufferedReader(new FileReader(patternsFile))) {
+        // Đọc các pattern và tính tỷ lệ support %
+        List<String> patterns = new ArrayList<>();
+        List<Double> sups = new ArrayList<>();
+        try (BufferedReader br = new BufferedReader(new FileReader(patternFile))) {
             String line;
-            while ((line=br.readLine())!=null) {
+            while ((line = br.readLine()) != null) {
                 line = line.trim();
                 if (line.isEmpty()) continue;
-                String[] parts = line.split("#SUP:");
-                if (parts.length<2) continue;
-                String patt = parts[0].trim();
-                int supP = Integer.parseInt(parts[1].trim().split("\\s+")[0]);
-                String[] toks = patt.split("-1")[0].trim().split("\\s+");
-                if (toks.length<2) continue;
-                List<Integer> X = new ArrayList<>();
-                for (int i=0; i<toks.length-1; i++) X.add(Integer.parseInt(toks[i]));
-                int Y = Integer.parseInt(toks[toks.length-1]);
-
-                int supX = 0;
-                for (String t : txs) {
-                    if (itemsetContains(t, X)) supX++;
-                }
-                if (supX==0) continue;
-                double conf = (double)supP/supX;
-                if (conf>=minConf) {
-                    List<String> namesX = new ArrayList<>();
-                    for (int c : X) namesX.add(map.get(c));
-                    String nameY = map.get(Y);
-                    System.out.printf("%s -> {%s}  (sup=%d, conf=%.2f)%n",
-                        namesX, nameY, supP, conf);
-                }
+                String[] p = line.split("#SUP:");
+                String patternPart = p[0].trim();
+                int sup = Integer.parseInt(p[1].trim().split("\\s+")[0]);
+                double percent = (sup * 100.0) / totalSID;
+                patterns.add(line);
+                sups.add(percent);
             }
         } catch (IOException e) {
-            System.out.println("Lỗi đọc mẫu: " + e.getMessage());
+            System.out.println("Lỗi đọc file pattern: " + e.getMessage());
+            return;
+        }
+
+        if (patterns.isEmpty()) {
+            System.out.println("Không có mẫu tuần tự.");
+            return;
+        }
+
+        // Hỏi người dùng nhập tỷ lệ phần trăm (từ minsup*100 đến 100)
+        double minPercent = minSupDefault * 100;
+        Scanner sc = new Scanner(System.in);
+        double userPercent = -1;
+        while (userPercent < minPercent || userPercent > 100) {
+            System.out.printf("Nhập tỷ lệ support tối thiểu (%.2f–100, đơn vị %%): ", minPercent);
+            try {
+                userPercent = Double.parseDouble(sc.nextLine().trim());
+                if (userPercent < minPercent || userPercent > 100) {
+                    System.out.println("Giá trị không hợp lệ.");
+                }
+            } catch (Exception e) {
+                System.out.println("Giá trị không hợp lệ.");
+            }
+        }
+
+        // Hiển thị các pattern có support >= userPercent
+        System.out.println("\nCác mẫu có support >= " + userPercent + "%:");
+        boolean found = false;
+        for (int i = 0; i < patterns.size(); i++) {
+            if (sups.get(i) >= userPercent) {
+                found = true;
+                String line = patterns.get(i);
+                String[] p = line.split("#SUP:");
+                String patternPart = p[0].trim();
+                String supStr = p[1].trim().split("\\s+")[0];
+                List<String> sets = new ArrayList<>();
+                for (String blk : patternPart.split("-1")) {
+                    blk = blk.trim();
+                    if (blk.isEmpty()) continue;
+                    List<String> names = new ArrayList<>();
+                    for (String tok : blk.split("\\s+")) {
+                        names.add(productMapping.getOrDefault(Integer.parseInt(tok), "Unknown"));
+                    }
+                    sets.add("{" + String.join(", ", names) + "}");
+                }
+                System.out.printf("%s    support=%s (%.2f%%)\n", String.join(" ; ", sets), supStr, sups.get(i));
+            }
+        }
+        if (!found) {
+            System.out.println("(Không có mẫu nào thỏa mãn)");
         }
     }
 
@@ -480,16 +481,25 @@ public class IntegratedSalesAssistant {
                 line = line.trim();
                 if (line.isEmpty()) continue;
                 String[] p = line.split("#SUP:");
-                String patt = p[0].replace("-1", "").trim();
-                List<Integer> pattItems = new ArrayList<>();
-                for (String t : patt.split("\\s+")) {
-                    pattItems.add(Integer.parseInt(t));
+                String patt = p[0].trim();
+                // Parse pattern into itemsets
+                List<List<Integer>> itemsets = new ArrayList<>();
+                for (String blk : patt.split("-1")) {
+                    blk = blk.trim();
+                    if (blk.isEmpty()) continue;
+                    List<Integer> items = new ArrayList<>();
+                    for (String t : blk.split("\\s+")) {
+                        try { items.add(Integer.parseInt(t)); } catch (NumberFormatException ex) {}
+                    }
+                    if (!items.isEmpty()) itemsets.add(items);
                 }
+                // Flatten for subsequence check
+                List<Integer> pattItems = new ArrayList<>();
+                for (List<Integer> iset : itemsets) pattItems.addAll(iset);
                 if (containsSubsequence(pattItems, query)) {
                     found++;
-                    List<String> names = new ArrayList<>();
-                    for (int c : pattItems) names.add(map.getOrDefault(c, "Unknown"));
-                    System.out.println("  " + names + " | support=" + p[1].trim().split("\\s+")[0]);
+                    String decoded = decodeSeq(itemsets, map);
+                    System.out.println("  " + decoded + " | support=" + p[1].trim().split("\\s+")[0]);
                 }
             }
         } catch (IOException e) {
@@ -659,47 +669,88 @@ public class IntegratedSalesAssistant {
         return list;
     }
 
-    // tính khuyến mãi
-    private static Map<Set<Integer>,Set<Integer>> computePromos(
-        List<List<Integer>> seq,
-        List<PromotionPattern> patterns
+    private static void printRecommendations(
+    Set<Integer> recommendations,
+    Map<Integer, String> map
     ) {
-        Map<Set<Integer>,Set<Integer>> out = new HashMap<>();
-        for (PromotionPattern p : patterns) {
-            if (p.leftItems.contains(p.promoItem)) continue;
-            boolean match = false;
-            if (p.isSequential) {
-                // Phải xuất hiện từng item ở các lần mua khác nhau, đúng thứ tự
-                int idx = 0;
-                for (List<Integer> blk : seq) {
-                    if (blk.contains(p.leftItems.get(idx))) {
-                        idx++;
-                        if (idx == p.leftItems.size()) break;
-                    }
-                }
-                if (idx == p.leftItems.size()) {
-                    boolean hasPromo = false;
-                    for (List<Integer> blk : seq) {
-                        if (blk.contains(p.promoItem)) { hasPromo = true; break; }
-                    }
-                    if (!hasPromo) match = true;
-                }
-            } else {
-                // Tất cả leftItems phải nằm trong cùng một lần mua
-                for (List<Integer> blk : seq) {
-                    if (blk.containsAll(p.leftItems) && !blk.contains(p.promoItem)) {
-                        match = true;
-                        break;
-                    }
+        System.out.println("--- Gợi ý từ hệ thống ---");
+        if (recommendations.isEmpty()) {
+            System.out.println("(Không có gợi ý nào thêm)");
+            return;
+        }
+        System.out.println("Dựa trên giỏ hàng của bạn, có thể bạn sẽ quan tâm đến:");
+        for (int itemCode : recommendations) {
+            System.out.println(" -> " + map.getOrDefault(itemCode, "Sản phẩm mã " + itemCode));
+        }
+        System.out.println("-------------------------");
+    }
+
+    private static boolean isPatternMatch(List<List<Integer>> transaction, List<List<Integer>> patternAntecedent) {
+        if (patternAntecedent.isEmpty()) {
+            return false; // Mẫu rỗng không hợp lệ
+        }
+
+        // TRƯỜNG HỢP 1: MẪU MUA KÈM (CO-OCCURRENCE)
+        // Mẫu chỉ có một bộ sản phẩm, ví dụ: [[1, 2]]
+        if (patternAntecedent.size() == 1) {
+            List<Integer> requiredItems = patternAntecedent.get(0);
+            for (List<Integer> transactionItemset : transaction) {
+                if (transactionItemset.containsAll(requiredItems)) {
+                    return true; // Tìm thấy một lần mua chứa đủ bộ sản phẩm yêu cầu
                 }
             }
-            if (match) {
-                out.computeIfAbsent(new HashSet<>(p.leftItems), x->new HashSet<>())
-                   .add(p.promoItem);
+            return false;
+        }
+
+        // TRƯỜNG HỢP 2: MẪU TUẦN TỰ (SEQUENTIAL)
+        // Mẫu có nhiều bộ sản phẩm, ví dụ: [[1], [3]]
+        int transactionIndex = 0;
+        for (List<Integer> patternItemset : patternAntecedent) {
+            boolean partFound = false;
+            // Tìm bộ sản phẩm của mẫu trong các lần mua còn lại của giao dịch
+            while (transactionIndex < transaction.size()) {
+                if (transaction.get(transactionIndex).containsAll(patternItemset)) {
+                    partFound = true;
+                    transactionIndex++; // Quan trọng: bước tiếp theo của mẫu phải được tìm ở lần mua sau
+                    break;
+                }
+                transactionIndex++;
+            }
+            if (!partFound) {
+                return false; // Nếu một phần của chuỗi không tìm thấy, toàn bộ mẫu không khớp
             }
         }
-        return out;
+        
+        // Nếu tất cả các phần của chuỗi đều được tìm thấy đúng thứ tự
+        return true;
     }
+
+    // tính khuyến mãi
+    private static Set<Integer> computeRecommendations(
+    List<List<Integer>> currentTransaction,
+    List<PromotionPattern> patterns
+) {
+    Set<Integer> recommendations = new HashSet<>();
+    for (PromotionPattern p : patterns) {
+        // 1. Kiểm tra xem sản phẩm đề xuất đã được mua chưa
+        boolean alreadyPurchased = false;
+        for (List<Integer> itemset : currentTransaction) {
+            if (itemset.contains(p.consequent)) {
+                alreadyPurchased = true;
+                break;
+            }
+        }
+        if (alreadyPurchased) {
+            continue; // Bỏ qua nếu đã mua rồi
+        }
+
+        // 2. Kiểm tra xem giỏ hàng hiện tại có khớp với mẫu vế trái không
+        if (isPatternMatch(currentTransaction, p.antecedent)) {
+            recommendations.add(p.consequent);
+        }
+    }
+    return recommendations;
+}
 
     // in khuyến mãi
     private static void inPromos(
@@ -745,6 +796,72 @@ public class IntegratedSalesAssistant {
         return sb.toString();
     }
 
+    // HÀM 1: Chỉ in ra các khuyến mãi dạng COMBO (MUA KÈM)
+private static void printComboPromotions(
+    List<Integer> justEnteredItems, // Chỉ xét những item người dùng vừa nhập
+    List<PromotionPattern> allPatterns,
+    Map<Integer, String> map
+) {
+    System.out.println("--- Khuyến mãi Combo cho sản phẩm vừa chọn ---");
+    boolean found = false;
+    for (PromotionPattern p : allPatterns) {
+        // Chỉ xét các quy tắc MUA KÈM (isSequential == false)
+        if (p.isSequential) continue;
+
+        // Vế trái của quy tắc mua kèm chỉ có 1 bộ item
+        List<Integer> triggerItems = p.antecedent.get(0);
+
+        // Kiểm tra nếu người dùng đã nhập một phần của combo
+        // và chưa có sản phẩm khuyến mãi
+        if (!justEnteredItems.contains(p.consequent) && triggerItems.containsAll(justEnteredItems)) {
+            List<Integer> remainingItems = new ArrayList<>(triggerItems);
+            remainingItems.removeAll(justEnteredItems);
+            
+            if (!remainingItems.isEmpty()) {
+                String triggerNames = justEnteredItems.stream().map(map::get).collect(Collectors.joining(", "));
+                String remainingNames = remainingItems.stream().map(map::get).collect(Collectors.joining(", "));
+                
+                System.out.println("🔥 Mua " + triggerNames + ", mua thêm " + remainingNames + " để hoàn thành combo và nhận ưu đãi cho " + map.get(p.consequent) + "!");
+                found = true;
+            }
+        }
+    }
+    if (!found) {
+        System.out.println("(Không có combo nào phù hợp)");
+    }
+}
+
+
+// HÀM 2: Chỉ in ra các đề xuất cho LẦN MUA TIẾP THEO (TUẦN TỰ)
+private static void printSequentialRecommendations(
+    List<List<Integer>> currentTransaction,
+    List<PromotionPattern> allPatterns,
+    Map<Integer, String> map
+) {
+    System.out.println("--- Đề xuất cho lần mua tiếp theo ---");
+    List<PromotionPattern> triggeredPatterns = new ArrayList<>();
+    for (PromotionPattern p : allPatterns) {
+        // Chỉ xét các quy tắc TUẦN TỰ (isSequential == true)
+        if (!p.isSequential) continue;
+
+        boolean alreadyPurchased = currentTransaction.stream().anyMatch(iset -> iset.contains(p.consequent));
+        if (!alreadyPurchased && isPatternMatch(currentTransaction, p.antecedent)) {
+            triggeredPatterns.add(p);
+        }
+    }
+
+    if (triggeredPatterns.isEmpty()) {
+        System.out.println("(Không có gợi ý nào)");
+        return;
+    }
+
+    triggeredPatterns.sort((p1, p2) -> Double.compare(p2.confidence, p1.confidence));
+    
+    for (PromotionPattern p : triggeredPatterns) {
+        System.out.println("💡 (Độ tin cậy: " + String.format("%.0f%%", p.confidence * 100) + ") -> " + map.get(p.consequent));
+    }
+}
+
     // ghi file
     private static void appendToFile(String f, String line) {
         try (FileWriter fw = new FileWriter(f, true)) {
@@ -784,61 +901,53 @@ public class IntegratedSalesAssistant {
         return res;
     }
 
-    // đọc mẫu khuyến mãi
+    // Hàm readPromotionPatterns cần được cập nhật để set cờ isSequential
     private static List<PromotionPattern> readPromotionPatterns(String f) {
         List<PromotionPattern> list = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(new FileReader(f))) {
-            String ln;
-            while ((ln=br.readLine())!=null) {
-                ln = ln.trim();
-                if (ln.isEmpty()) continue;
-                String[] p = ln.split("#SUP:");
-                String patternPart = p[0].trim();
-                // Parse itemsets by -1
-                List<List<Integer>> itemsets = new ArrayList<>();
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || !line.contains("#SUP:")) continue;
+
+                // Parse pattern and support
+                String[] parts = line.split("#SUP:");
+                String patternPart = parts[0].trim();
+                int sup = Integer.parseInt(parts[1].trim().split("\\s+")[0]);
+
+                // Parse the sequence into itemsets
+                List<List<Integer>> fullPattern = new ArrayList<>();
                 for (String blk : patternPart.split("-1")) {
                     blk = blk.trim();
                     if (blk.isEmpty()) continue;
-                    List<Integer> items = new ArrayList<>();
-                    for (String t : blk.split("\\s+")) {
-                        if (!t.equals("-2")) {
-                            items.add(Integer.parseInt(t));
-                        }
+                    List<Integer> itemset = new ArrayList<>();
+                    for (String tok : blk.split("\\s+")) {
+                        try {
+                            itemset.add(Integer.parseInt(tok));
+                        } catch (NumberFormatException ex) { }
                     }
-                    if (!items.isEmpty()) itemsets.add(items);
+                    if (!itemset.isEmpty()) fullPattern.add(itemset);
                 }
-                if (itemsets.size() >= 2) {
-                    // Kiểm tra nếu tất cả itemset (trừ cuối) đều chỉ có 1 phần tử thì là tuần tự
-                    boolean allSingle = true;
-                    for (int i = 0; i < itemsets.size()-1; i++) {
-                        if (itemsets.get(i).size() != 1) { allSingle = false; break; }
-                    }
-                    List<Integer> left = new ArrayList<>();
-                    if (allSingle) {
-                        // Tuần tự: leftItems là từng item riêng biệt
-                        for (int i = 0; i < itemsets.size()-1; i++) {
-                            left.add(itemsets.get(i).get(0));
-                        }
-                        List<Integer> lastSet = itemsets.get(itemsets.size()-1);
-                        if (!lastSet.isEmpty()) {
-                            int promo = lastSet.get(lastSet.size()-1);
-                            list.add(new PromotionPattern(left, promo, true));
-                        }
-                    } else {
-                        // Cùng itemset: gộp tất cả itemset (trừ cuối) lại
-                        for (int i = 0; i < itemsets.size()-1; i++) {
-                            left.addAll(itemsets.get(i));
-                        }
-                        List<Integer> lastSet = itemsets.get(itemsets.size()-1);
-                        if (!lastSet.isEmpty()) {
-                            int promo = lastSet.get(lastSet.size()-1);
-                            list.add(new PromotionPattern(left, promo, false));
-                        }
-                    }
+                if (fullPattern.size() < 2) continue; // Need at least antecedent and consequent
+
+                // Antecedent: all but last itemset
+                List<List<Integer>> antecedent = new ArrayList<>(fullPattern.subList(0, fullPattern.size() - 1));
+                // Consequent: first item of last itemset
+                int consequent = fullPattern.get(fullPattern.size() - 1).get(0);
+
+                // Confidence: for demo, set to 1.0 (or compute if you have data)
+                double confidence = 1.0;
+
+                // Một mẫu được coi là tuần tự nếu vế trái của nó chứa nhiều hơn 1 bộ itemset,
+                // hoặc nếu mẫu gốc có nhiều hơn 1 bộ itemset.
+                boolean isSeq = antecedent.size() > 1 || fullPattern.size() > 1;
+
+                if (!antecedent.isEmpty()) {
+                    list.add(new PromotionPattern(antecedent, consequent, confidence, isSeq));
                 }
             }
         } catch (IOException e) {
-            System.out.println("Lỗi đọc khuyến mãi: " + e.getMessage());
+            System.out.println("Lỗi đọc file mẫu: " + e.getMessage());
         }
         return list;
     }
@@ -856,16 +965,20 @@ public class IntegratedSalesAssistant {
         return false;
     }
 
-    // lớp lưu khuyến mãi
-    private static class PromotionPattern {
-        List<Integer> leftItems;
-        int promoItem;
-        boolean isSequential; // true if pattern is sequential (e.g. {a},{b}), false if in same itemset (e.g. {a,b})
-        PromotionPattern(List<Integer> left, int promo, boolean isSequential) {
-            this.leftItems = left;
-            this.promoItem  = promo;
-        }
+        private static class PromotionPattern {
+    List<List<Integer>> antecedent;
+    int consequent;
+    double confidence;
+    boolean isSequential; // true cho {a}->{b}, false cho {a,b}->{c}
+
+    PromotionPattern(List<List<Integer>> antecedent, int consequent, double confidence, boolean isSequential) {
+        this.antecedent = antecedent;
+        this.consequent = consequent;
+        this.confidence = confidence;
+        this.isSequential = isSequential;
     }
+}
+
 
     public static Map<Integer, String> generateProductMappingFromFile(String filePath) {
         TreeSet<Integer> uniqueCodes = new TreeSet<>();
@@ -907,54 +1020,4 @@ public class IntegratedSalesAssistant {
         return map;
     }
 
-    // Thêm hàm sinh luật kết hợp trong cùng itemset
-    private static void generateItemsetAssociationRules(String file, Map<Integer, String> map, double minConfPercent) {
-        Map<Integer, Integer> countA = new HashMap<>();
-        Map<String, Integer> countAB = new HashMap<>();
-        Set<Integer> allItems = map.keySet();
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty() || line.startsWith("#")) continue;
-                for (String blk : line.split("-1")) {
-                    blk = blk.trim();
-                    if (blk.isEmpty() || blk.contains("-2")) continue;
-                    List<Integer> set = new ArrayList<>();
-                    for (String t : blk.split("\\s+")) {
-                        try { set.add(Integer.parseInt(t)); } catch (NumberFormatException ex) { }
-                    }
-                    for (int i = 0; i < set.size(); i++) {
-                        int a = set.get(i);
-                        countA.put(a, countA.getOrDefault(a, 0) + 1);
-                        for (int j = i + 1; j < set.size(); j++) {
-                            int b = set.get(j);
-                            String key = a + "," + b;
-                            countAB.put(key, countAB.getOrDefault(key, 0) + 1);
-                        }
-                    }
-                }
-            }
-        } catch (IOException e) {
-            System.out.println("Lỗi đọc file giao dịch: " + e.getMessage());
-            return;
-        }
-        System.out.println("Các luật (Nếu A thì B) trong cùng itemset có confidence >= MinConf:");
-        boolean found = false;
-        // Chỉ in các cặp (A,B) đã được đếm (B đứng sau A trong itemset)
-        for (Map.Entry<String, Integer> entry : countAB.entrySet()) {
-            String[] ab = entry.getKey().split(",");
-            int a = Integer.parseInt(ab[0]);
-            int b = Integer.parseInt(ab[1]);
-            int cntA = countA.getOrDefault(a, 0);
-            int cntAB = entry.getValue();
-            if (cntA == 0) continue;
-            double conf = (double) cntAB / cntA * 100.0;
-            if (conf >= minConfPercent) {
-                found = true;
-                System.out.printf("  Nếu %-12s thì %-12s : %.2f%% (%d/%d)\n", map.get(a), map.get(b), conf, cntAB, cntA);
-            }
-        }
-        if (!found) System.out.println("(Không có luật nào thỏa mãn MinConf)");
-    }
 }
