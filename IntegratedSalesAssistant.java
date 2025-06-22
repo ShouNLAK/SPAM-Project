@@ -179,7 +179,7 @@ public class IntegratedSalesAssistant {
 
         while (true) {
             List<Integer> currentPurchase = new ArrayList<>();
-            boolean comboChecked = false; // <-- add this flag
+            boolean comboChecked = false;
             while (true) {
                 System.out.print("\nNhập mã SP cho lần mua này (cách nhau bởi dấu cách), hoặc nhập '0' để kết thúc lần mua, hoặc nhập '00' để kết thúc phiên: ");
                 String line = scanner.nextLine().trim();
@@ -203,17 +203,11 @@ public class IntegratedSalesAssistant {
                 if (line.equals("0")) {
                     // Kết thúc lần mua hiện tại
                     if (!currentPurchase.isEmpty()) {
-                        System.out.println("   -> Đã ghi nhận: " + decodeItemset(currentPurchase, map));
-                        seq.add(new ArrayList<>(currentPurchase));
-                    }
-                    break;
-                }
-                List<Integer> entered = parseCodes(line);
-                if (!entered.isEmpty()) {
-                    currentPurchase.addAll(entered);
-                    System.out.println("   -> Đã thêm vào giỏ: " + decodeItemset(entered, map));
-                    // Hiển thị khuyến mãi ngay sau khi thêm sản phẩm vào giỏ
-                    if (!comboChecked) {
+                        // Sort before display and save
+                        List<Integer> sortedCurrent = new ArrayList<>(currentPurchase);
+                        Collections.sort(sortedCurrent);
+                        System.out.println("   -> Xác nhận giỏ hàng: " + decodeItemset(sortedCurrent, map));
+                        // Hiển thị lại khuyến mãi khi xác nhận giỏ hàng
                         boolean comboActivated = false;
                         Set<Integer> enteredSet = new HashSet<>(currentPurchase);
                         try (BufferedReader br = new BufferedReader(new FileReader("sales_patterns.txt"))) {
@@ -237,77 +231,74 @@ public class IntegratedSalesAssistant {
                                 if (nonEmptyBlockCount == 1 && itemset.size() > 1) {
                                     Set<Integer> comboSet = new HashSet<>(itemset);
                                     if (comboSet.equals(enteredSet)) {
-                                        System.out.println("✅ ĐÃ KÍCH HOẠT khuyến mãi: Ưu đãi cho combo " + decodeItemset(itemset, map) + "!");
+                                        System.out.println("✅ Khuyến mãi: Ưu đãi cho combo " + decodeItemset(itemset, map));
                                         comboActivated = true;
                                         break;
-                                    } else if (enteredSet.size() < itemset.size() && itemset.containsAll(enteredSet)) {
-                                        List<Integer> missing = new ArrayList<>(itemset);
-                                        missing.removeAll(currentPurchase);
-                                        System.out.println("🔥 Khuyến mãi: Nếu bạn mua thêm " + decodeItemset(missing, map) +
-                                            " thì sẽ nhận ưu đãi cho combo " + decodeItemset(itemset, map) + "!");
-                                        comboActivated = true;
                                     }
                                 }
                             }
                         } catch (IOException e) {
                             System.out.println("Lỗi đọc file pattern: " + e.getMessage());
                         }
-                        if (!comboActivated) {
-                            System.out.println("(Không có combo khuyến mãi phù hợp cho sản phẩm vừa nhập)");
+                        seq.add(new ArrayList<>(currentPurchase));
+                    }
+                    break;
+                }
+                List<Integer> entered = parseCodes(line);
+                if (!entered.isEmpty()) {
+                    currentPurchase.addAll(entered);
+                    // Sort itemset in ascending order before displaying
+                    List<Integer> sortedCurrent = new ArrayList<>(currentPurchase);
+                    Collections.sort(sortedCurrent);
+                    System.out.println("   -> Đã thêm vào giỏ: " + decodeItemset(sortedCurrent, map));
+                    // Hiển thị khuyến mãi ngay sau khi thêm sản phẩm vào giỏ
+                    boolean comboActivated = false;
+                    Set<Integer> enteredSet = new HashSet<>(currentPurchase);
+                    try (BufferedReader br = new BufferedReader(new FileReader("sales_patterns.txt"))) {
+                        String pline;
+                        while ((pline = br.readLine()) != null) {
+                            pline = pline.trim();
+                            if (pline.isEmpty() || !pline.contains("#SUP:")) continue;
+                            String[] parts = pline.split("#SUP:");
+                            String patternPart = parts[0].trim();
+                            String[] itemsetBlocks = patternPart.split("-1");
+                            List<Integer> itemset = new ArrayList<>();
+                            int nonEmptyBlockCount = 0;
+                            for (String blk : itemsetBlocks) {
+                                blk = blk.trim();
+                                if (blk.isEmpty()) continue;
+                                nonEmptyBlockCount++;
+                                for (String t : blk.split("\\s+")) {
+                                    if (!t.isEmpty()) itemset.add(Integer.parseInt(t));
+                                }
+                            }
+                            if (nonEmptyBlockCount == 1 && itemset.size() > 1) {
+                                Set<Integer> comboSet = new HashSet<>(itemset);
+                                if (comboSet.equals(enteredSet)) {
+                                    System.out.println("✅ ĐÃ KÍCH HOẠT khuyến mãi: Ưu đãi cho combo " + decodeItemset(itemset, map) + "!");
+                                    comboActivated = true;
+                                    break;
+                                } else if (enteredSet.size() < itemset.size() && itemset.containsAll(enteredSet)) {
+                                    List<Integer> missing = new ArrayList<>(itemset);
+                                    missing.removeAll(currentPurchase);
+                                    System.out.println("🔥 Khuyến mãi: Nếu bạn mua thêm " + decodeItemset(missing, map) +
+                                        " thì sẽ nhận ưu đãi cho combo " + decodeItemset(itemset, map) + "!");
+                                    comboActivated = true;
+                                }
+                            }
                         }
-                        comboChecked = true; // chỉ check combo 1 lần cho mỗi lần nhập sản phẩm
+                    } catch (IOException e) {
+                        System.out.println("Lỗi đọc file pattern: " + e.getMessage());
                     }
                 }
             }
 
             if (seq.isEmpty() || seq.get(seq.size()-1).isEmpty()) continue;
 
-            // Đề xuất mua thêm cho lần mua hiện tại (itemset cuối cùng)
-            List<Integer> lastPurchase = seq.get(seq.size()-1);
-            boolean comboActivated = false;
-            Set<Integer> enteredSet = new HashSet<>(lastPurchase);
-            try (BufferedReader br = new BufferedReader(new FileReader("sales_patterns.txt"))) {
-                String pline;
-                while ((pline = br.readLine()) != null) {
-                    pline = pline.trim();
-                    if (pline.isEmpty() || !pline.contains("#SUP:")) continue;
-                    String[] parts = pline.split("#SUP:");
-                    String patternPart = parts[0].trim();
-                    String[] itemsetBlocks = patternPart.split("-1");
-                    List<Integer> itemset = new ArrayList<>();
-                    int nonEmptyBlockCount = 0;
-                    for (String blk : itemsetBlocks) {
-                        blk = blk.trim();
-                        if (blk.isEmpty()) continue;
-                        nonEmptyBlockCount++;
-                        for (String t : blk.split("\\s+")) {
-                            if (!t.isEmpty()) itemset.add(Integer.parseInt(t));
-                        }
-                    }
-                    if (nonEmptyBlockCount == 1 && itemset.size() > 1) {
-                        Set<Integer> comboSet = new HashSet<>(itemset);
-                        if (comboSet.equals(enteredSet)) {
-                            System.out.println("✅ ĐÃ KÍCH HOẠT khuyến mãi: Ưu đãi cho combo " + decodeItemset(itemset, map) + "!");
-                            comboActivated = true;
-                            break;
-                        } else if (enteredSet.size() < itemset.size() && itemset.containsAll(enteredSet)) {
-                            List<Integer> missing = new ArrayList<>(itemset);
-                            missing.removeAll(currentPurchase);
-                            System.out.println("🔥 Khuyến mãi: Nếu bạn mua thêm " + decodeItemset(missing, map) +
-                                " thì sẽ nhận ưu đãi cho combo " + decodeItemset(itemset, map) + "!");
-                            comboActivated = true;
-                        }
-                    }
-                }
-            } catch (IOException e) {
-                System.out.println("Lỗi đọc file pattern: " + e.getMessage());
-            }
-            if (!comboActivated) {
-                System.out.println("(Không có combo khuyến mãi phù hợp cho sản phẩm vừa nhập)");
-            }
-
-            // Đề xuất tuần tự cho lần mua tiếp theo
+            // Đề xuất tuần tự cho lần mua tiếp theo (dựa vào tất cả các itemset đã mua)
             Set<Integer> sequentialSuggestions = new LinkedHashSet<>();
+            Set<Integer> allPurchased = new HashSet<>();
+            for (List<Integer> itemset : seq) allPurchased.addAll(itemset);
             try (BufferedReader br = new BufferedReader(new FileReader("sales_patterns.txt"))) {
                 String pline;
                 while ((pline = br.readLine()) != null) {
@@ -325,9 +316,13 @@ public class IntegratedSalesAssistant {
                         }
                         if (!items.isEmpty()) itemsets.add(items);
                     }
-                    if (itemsets.size() >= 2 && itemsets.get(0).containsAll(lastPurchase)) {
-                        for (Integer sug : itemsets.get(1)) {
-                            if (!lastPurchase.contains(sug)) sequentialSuggestions.add(sug);
+                    // Đề xuất sản phẩm từ các mẫu tuần tự có itemset đầu hoặc các itemset con là tập con của các lần mua
+                    for (List<Integer> iset : itemsets) {
+                        if (!allPurchased.containsAll(iset)) {
+                            // Nếu iset chưa mua hết, đề xuất các sản phẩm còn thiếu
+                            for (Integer sug : iset) {
+                                if (!allPurchased.contains(sug)) sequentialSuggestions.add(sug);
+                            }
                         }
                     }
                 }
