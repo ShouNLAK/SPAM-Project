@@ -78,6 +78,6 @@ Chương trình này sử dụng **thuật toán SPAM** từ thư viện **SPMF*
 
 ---
 
-**Tác giả:**  
+**Tác giả: ShouNLAK**  
 - Dựa trên thuật toán SPAM và thư viện SPMF  
 - Tối ưu giao diện và chức năng cho nghiệp vụ bán hàng thực tế
