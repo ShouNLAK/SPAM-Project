@@ -1137,41 +1137,30 @@ private static List<Integer> getMissingItems(List<Integer> combo, List<Integer> 
 }
 
     public static Map<Integer, String> generateProductMappingFromFile(String filePath) {
-        TreeSet<Integer> uniqueCodes = new TreeSet<>();
-        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+        // Đọc từ file CSV download.csv, lấy Số thứ tự và Tên sản phẩm
+        Map<Integer, String> map = new LinkedHashMap<>();
+        try (BufferedReader br = new BufferedReader(new FileReader("Product_Details.csv"))) {
             String line;
+            boolean isFirstLine = true;
             while ((line = br.readLine()) != null) {
+                if (isFirstLine) { // Bỏ qua dòng tiêu đề
+                    isFirstLine = false;
+                    continue;
+                }
                 line = line.trim();
-                if (line.isEmpty() || line.startsWith("#")) continue;
-                for (String blk : line.split("-1")) {
-                    blk = blk.trim();
-                    if (blk.isEmpty() || blk.contains("-2")) continue;
-                    for (String tok : blk.split("\\s+")) {
-                        try {
-                            uniqueCodes.add(Integer.parseInt(tok));
-                        } catch (NumberFormatException ex) { }
-                    }
+                if (line.isEmpty()) continue;
+                String[] parts = line.split(",", 3);
+                if (parts.length < 2) continue;
+                try {
+                    int id = Integer.parseInt(parts[0].trim());
+                    String name = parts[1].trim();
+                    map.put(id, name);
+                } catch (NumberFormatException ex) {
+                    // Bỏ qua dòng không hợp lệ
                 }
             }
         } catch (IOException e) {
-            System.out.println("Lỗi đọc file: " + e.getMessage());
-        }
-        // Tạo tên a, b, ..., z, aa, ab, ...
-        List<String> names = new ArrayList<>();
-        for (int i = 1; names.size() < uniqueCodes.size(); i++) {
-            int n = i;
-            StringBuilder sb = new StringBuilder();
-            while (n > 0) {
-                n--;
-                sb.insert(0, (char)('a' + (n % 26)));
-                n /= 26;
-            }
-            names.add(sb.toString());
-        }
-        Map<Integer, String> map = new LinkedHashMap<>();
-        int idx = 0;
-        for (Integer code : uniqueCodes) {
-            map.put(code, names.get(idx++));
+            System.out.println("Lỗi đọc file download.csv: " + e.getMessage());
         }
         return map;
     }
