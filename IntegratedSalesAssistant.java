@@ -542,18 +542,22 @@ public class IntegratedSalesAssistant {
         System.out.println("Support lớn nhất: " + maxSup + " | nhỏ nhất: " + (minSup==Integer.MAX_VALUE?0:minSup));
         System.out.println("Tần suất xuất hiện của từng sản phẩm trong mẫu:");
         System.out.println("-----------------------------------------------");
+        // Sắp xếp tăng dần theo tần suất
         itemFreq.entrySet().stream()
-            .sorted((a,b)->b.getValue()-a.getValue())
+            .sorted(Comparator.comparingInt(Map.Entry::getValue))
             .forEach(e -> System.out.printf("%-12s : %d lần\n", map.getOrDefault(e.getKey(),"Unknown"), e.getValue()));
         System.out.println("\nBIỂU ĐỒ TẦN SUẤT (dạng text):");
         System.out.println("-----------------------------------------------");
-        for (var e : itemFreq.entrySet()) {
-            String name = map.getOrDefault(e.getKey(), "Unknown");
-            int barLen = Math.min(e.getValue(), 40);
-            StringBuilder bar = new StringBuilder();
-            for (int i = 0; i < barLen; i++) bar.append('#');
-            System.out.printf("%-12s | %s (%d)\n", name, bar, e.getValue());
-        }
+        // Sắp xếp tăng dần theo tần suất cho biểu đồ
+        itemFreq.entrySet().stream()
+            .sorted(Comparator.comparingInt(Map.Entry::getValue))
+            .forEach(e -> {
+                String name = map.getOrDefault(e.getKey(), "Unknown");
+                int barLen = Math.min(e.getValue(), 40);
+                StringBuilder bar = new StringBuilder();
+                for (int i = 0; i < barLen; i++) bar.append('#');
+                System.out.printf("%-64s | %s (%d)\n", name, bar, e.getValue());
+            });
         System.out.println("======================================================");
     }
 
@@ -563,8 +567,11 @@ public class IntegratedSalesAssistant {
             System.out.println("Không có mã sản phẩm để truy vấn.");
             return;
         }
-        System.out.println("Kết quả truy vấn mẫu chứa: " + decodeSeq(List.of(query), map));
-        int found = 0;
+        // Sắp xếp query tăng dần để hiển thị nhất quán
+        List<Integer> sortedQuery = new ArrayList<>(query);
+        Collections.sort(sortedQuery);
+        System.out.println("Kết quả truy vấn mẫu chứa: " + decodeSeq(List.of(sortedQuery), map));
+        List<PatternResult> foundPatterns = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
             String line;
             while ((line = br.readLine()) != null) {
@@ -586,16 +593,23 @@ public class IntegratedSalesAssistant {
                 // Flatten for subsequence check
                 List<Integer> pattItems = new ArrayList<>();
                 for (List<Integer> iset : itemsets) pattItems.addAll(iset);
-                if (containsSubsequence(pattItems, query)) {
-                    found++;
+                if (containsSubsequence(pattItems, sortedQuery)) {
                     String decoded = decodeSeq(itemsets, map);
-                    System.out.println("  " + decoded + " | support=" + p[1].trim().split("\\s+")[0]);
+                    int sup = 0;
+                    try { sup = Integer.parseInt(p[1].trim().split("\\s+")[0]); } catch (Exception ex) {}
+                    foundPatterns.add(new PatternResult(decoded, sup));
                 }
             }
         } catch (IOException e) {
             System.out.println("Lỗi đọc file mẫu: " + e.getMessage());
         }
-        if (found == 0) System.out.println("(Không tìm thấy mẫu phù hợp)");
+        if (foundPatterns.isEmpty()) {
+            System.out.println("(Không tìm thấy mẫu phù hợp)");
+        } else {
+            for (PatternResult pr : foundPatterns) {
+                System.out.println("  " + pr.pattern + " | support=" + pr.support);
+            }
+        }
     }
 
     // 10) Pattern Recommendation
@@ -1172,15 +1186,16 @@ private static void deXuatTuItemsetCon(List<Integer> itemset, String patternFile
     // In kết quả
     System.out.println("Đề xuất cho itemset " + decodeItemset(itemset, productMapping) + ":");
     if (allSuggestions.isEmpty()) {
-        System.out.println("(Không có đề xuất nào)");
+        System.out.println("{}");
     } else {
         // Sắp xếp theo ID tăng dần
         List<Integer> sortedSuggestions = new ArrayList<>(allSuggestions);
         Collections.sort(sortedSuggestions);
-        List<String> names = sortedSuggestions.stream()
-            .map(id -> productMapping.getOrDefault(id, "SP #" + id))
-            .collect(Collectors.toList());
-        System.out.println(String.join(", ", names));
+        System.out.println("{}");
+        for (int id : sortedSuggestions) {
+            String name = productMapping.getOrDefault(id, "SP #" + id);
+            System.out.println("{" + name + "},");
+        }
     }
 }
 
@@ -1249,6 +1264,14 @@ private static void showdiscount(List<PromotionPattern> promotionPatterns, Map<I
     }
     if (!found) {
         System.out.println("(Không có khuyến mãi mở rộng nào)");
+    }
+}
+private static class PatternResult {
+    String pattern;
+    int support;
+    PatternResult(String pattern, int support) {
+        this.pattern = pattern;
+        this.support = support;
     }
 }
 }
