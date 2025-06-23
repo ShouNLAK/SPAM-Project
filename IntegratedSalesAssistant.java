@@ -3,6 +3,10 @@ import java.io.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
+// import app.src.main.java.ProductCSVUtil;
+import main.java.ProductCSVUtil;
+import main.java.SalesTransactionUtil;
+
 
 public class IntegratedSalesAssistant {
 
@@ -13,6 +17,12 @@ public class IntegratedSalesAssistant {
     private static int maxGap            = Integer.MAX_VALUE;
 
     public static void main(String[] args) {
+        ProductCSVUtil.exportProductDetails("Online Retail.csv", "Product_Details.csv");
+        try {
+        SalesTransactionUtil.processTransactions("Online Retail.csv", "sales_transactions.txt", "Product_Details.csv");
+        } catch (Exception e) {
+            System.out.println("Lỗi xử lý giao dịch: " + e.getMessage());
+        };
         // --- Bước 1: Khai phá SPAM trên lịch sử giao dịch ---
         String historicalFile = "sales_transactions.txt";
         String patternFile    = "sales_patterns.txt";
@@ -168,7 +178,7 @@ public class IntegratedSalesAssistant {
     private static void hienThiBangQuyDoi(Map<Integer, String> map) {
         List<Integer> keys = new ArrayList<>(map.keySet());
         Collections.sort(keys);
-        System.out.println("\nMã -> Tên trái cây:");
+        System.out.println("\nMã -> Tên :");
         for (Integer k : keys) {
             System.out.println(k + " -> " + map.get(k));
         }
@@ -400,27 +410,27 @@ public class IntegratedSalesAssistant {
     // Thống kê doanh thu và số lượng bán (có tính giá từ Product_Details.csv)
     private static void thongKeDoanhThuVaSoLuongBan(String file, Map<Integer, String> map) {
         // Đọc giá sản phẩm từ Product_Details.csv
-        Map<Integer, Long> priceMap = new HashMap<>();
-        try (BufferedReader br = new BufferedReader(new FileReader("Product_Details.csv"))) {
-            String line;
-            boolean isFirstLine = true;
-            while ((line = br.readLine()) != null) {
-                if (isFirstLine) { isFirstLine = false; continue; }
-                line = line.trim();
-                if (line.isEmpty()) continue;
-                String[] parts = line.split(",", 3);
-                if (parts.length < 3) continue;
-                try {
-                    int id = Integer.parseInt(parts[0].trim());
-                    String priceStr = parts[2].replaceAll("[^\\d]", "");
-                    long price = priceStr.isEmpty() ? 0 : Long.parseLong(priceStr);
-                    priceMap.put(id, price);
-                } catch (NumberFormatException ex) {}
-            }
-        } catch (IOException e) {
-            System.out.println("Lỗi đọc file Product_Details.csv: " + e.getMessage());
-            return;
-        }
+        // Map<Integer, Long> priceMap = new HashMap<>();
+        // try (BufferedReader br = new BufferedReader(new FileReader("Product_Details.csv"))) {
+        //     String line;
+        //     boolean isFirstLine = true;
+        //     while ((line = br.readLine()) != null) {
+        //         if (isFirstLine) { isFirstLine = false; continue; }
+        //         line = line.trim();
+        //         if (line.isEmpty()) continue;
+        //         String[] parts = line.split(",", 3);
+        //         if (parts.length < 3) continue;
+        //         try {
+        //             int id = Integer.parseInt(parts[0].trim());
+        //             String priceStr = parts[2].replaceAll("[^\\d]", "");
+        //             long price = priceStr.isEmpty() ? 0 : Long.parseLong(priceStr);
+        //             priceMap.put(id, price);
+        //         } catch (NumberFormatException ex) {}
+        //     }
+        // } catch (IOException e) {
+        //     System.out.println("Lỗi đọc file Product_Details.csv: " + e.getMessage());
+        //     return;
+        // }
 
         // Đếm số lượng bán từng sản phẩm
         Map<Integer, Integer> countMap = new HashMap<>();
@@ -445,7 +455,7 @@ public class IntegratedSalesAssistant {
             return;
         }
 
-        System.out.println("\n===== THỐNG KÊ SỐ LƯỢNG BÁN & DOANH THU =====");
+        System.out.println("\n===== THỐNG KÊ SỐ LƯỢNG BÁN =====");
         if (countMap.isEmpty()) {
             System.out.println("(Không có dữ liệu)");
             return;
@@ -456,11 +466,7 @@ public class IntegratedSalesAssistant {
             int id = entry.getKey();
             String name = map.getOrDefault(id, "SP #" + id);
             int count = entry.getValue();
-            long price = priceMap.getOrDefault(id, 0L);
-            long total = price * count;
-            String priceStr = price == 0 ? "?" : String.format("%,d đ", price).replace(',', '.');
-            String totalStr = price == 0 ? "?" : String.format("%,d đ", total).replace(',', '.');
-            System.out.printf("%-35s : %2d lần | Doanh thu : %s\n", name, count, totalStr);
+            System.out.printf("%-35s : %2d lần\n", name, count);
         }
     }
 
@@ -1255,7 +1261,7 @@ private static List<Integer> getMissingItems(List<Integer> combo, List<Integer> 
 }
 
     public static Map<Integer, String> generateProductMappingFromFile(String filePath) {
-        // Đọc từ file CSV download.csv, lấy Số thứ tự và Tên sản phẩm
+        // Đọc từ file CSV Product_Details.csv, lấy Số thứ tự và Tên sản phẩm
         Map<Integer, String> map = new LinkedHashMap<>();
         try (BufferedReader br = new BufferedReader(new FileReader("Product_Details.csv"))) {
             String line;
@@ -1268,10 +1274,10 @@ private static List<Integer> getMissingItems(List<Integer> combo, List<Integer> 
                 line = line.trim();
                 if (line.isEmpty()) continue;
                 String[] parts = line.split(",", 3);
-                if (parts.length < 2) continue;
+                if (parts.length < 3) continue;
                 try {
                     int id = Integer.parseInt(parts[0].trim());
-                    String name = parts[1].trim();
+                    String name = parts[2].trim(); // Lấy tên sản phẩm từ cột thứ 3
                     map.put(id, name);
                 } catch (NumberFormatException ex) {
                     // Bỏ qua dòng không hợp lệ
