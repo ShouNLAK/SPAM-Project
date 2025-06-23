@@ -42,14 +42,17 @@ public class IntegratedSalesAssistant {
             System.out.println("|           SALES ASSISTANT MAIN MENU            |");
             System.out.println("==================================================");
             System.out.println("|  1. Bảng quy đổi trái cây (mã -> tên)          |");
+            System.out.println("|  1.1. Tìm kiếm sản phẩm theo tên               |");
             System.out.println("|  2. Nhập phiên giao dịch mới                   |");
             System.out.println("|  3. Xem lịch sử giao dịch trong phiên          |");
+            System.out.println("|  3.1. Xem lịch sử giao dịch chi tiết (theo SID)|");
             System.out.println("|  4. Xem mẫu thường xuyên                       |");
             System.out.println("|  5. Đề xuất sau mua                            |");
             System.out.println("|  6. Danh sách khuyến mãi                       |");
             System.out.println("|  7. Khai thác luật kết hợp                     |");
             System.out.println("|  8. Xem Top-K mẫu tuần tự                      |");
             System.out.println("|  9. Tóm tắt & trực quan hóa mẫu tuần tự        |");
+            System.out.println("|  9.1. Thống kê doanh thu & số lượng bán        |");
             System.out.println("|  10. Truy vấn mẫu tuần tự                      |");
             System.out.println("| -1. Tuỳ chọn nâng cao (minsup, độ dài, ...)    |");
             System.out.println("|  0. Thoát chương trình                         |");
@@ -61,6 +64,9 @@ public class IntegratedSalesAssistant {
                 case "1":
                     hienThiBangQuyDoi(productMapping);
                     break;
+                case "1.1":
+                    timKiemSanPhamTheoTen(scanner, productMapping);
+                    break;
                 case "2":
                     String newTrans = nhapPhienGiaoDich(
                         scanner, productMapping, promotionPatterns, historicalFile
@@ -68,6 +74,9 @@ public class IntegratedSalesAssistant {
                     break;
                 case "3":
                     hienThiLichSuPhien(sessionHistory, productMapping);
+                    break;
+                case "3.1":
+                    hienThiLichSuTheoSID("sales_transactions.txt", productMapping);
                     break;
                 case "4":
                     hienThiFrequentPatterns(patternFile, productMapping);
@@ -96,6 +105,9 @@ public class IntegratedSalesAssistant {
                     break;
                 case "9":
                     summarizePatterns(patternFile, productMapping);
+                    break;
+                case "9.1":
+                    thongKeDoanhThuVaSoLuongBan("sales_transactions.txt", productMapping);
                     break;
                 case "10":
                     System.out.println("\n----------- TRUY VẤN MẪU TUẦN TỰ -----------");
@@ -313,6 +325,142 @@ public class IntegratedSalesAssistant {
                 parts.add("{" + String.join(", ", itemset) + "}");
             }
             System.out.println("GD" + (idx++) + ": " + String.join(" ; ", parts));
+        }
+    }
+
+    // Hiển thị lịch sử giao dịch chi tiết theo SID (có hỏi người dùng)
+    private static void hienThiLichSuTheoSID(String file, Map<Integer, String> map) {
+        Scanner sc = new Scanner(System.in);
+        System.out.println("\n===== LỊCH SỬ GIAO DỊCH CHI TIẾT (theo SID) =====");
+        System.out.print("Bạn muốn xem tất cả (nhập 'all') hay chỉ 1 SID (nhập số thứ tự)? ");
+        String input = sc.nextLine().trim();
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String line;
+            int sid = 1;
+            boolean found = false;
+            if (input.equalsIgnoreCase("all")) {
+                while ((line = br.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty()) continue;
+                    List<List<String>> decoded = decodeTransaction(line, map);
+                    List<String> parts = new ArrayList<>();
+                    for (List<String> itemset : decoded) {
+                        parts.add("{" + String.join(", ", itemset) + "}");
+                    }
+                    System.out.println("SID " + (sid++) + ": " + String.join(" ; ", parts));
+                }
+            } else {
+                int targetSID = -1;
+                try {
+                    targetSID = Integer.parseInt(input);
+                } catch (NumberFormatException ex) {
+                    System.out.println("SID không hợp lệ.");
+                    return;
+                }
+                while ((line = br.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty()) continue;
+                    if (sid == targetSID) {
+                        List<List<String>> decoded = decodeTransaction(line, map);
+                        List<String> parts = new ArrayList<>();
+                        for (List<String> itemset : decoded) {
+                            parts.add("{" + String.join(", ", itemset) + "}");
+                        }
+                        System.out.println("SID " + sid + ": " + String.join(" ; ", parts));
+                        found = true;
+                        break;
+                    }
+                    sid++;
+                }
+                if (!found) {
+                    System.out.println("Không tìm thấy SID này trong lịch sử.");
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("Lỗi đọc file lịch sử: " + e.getMessage());
+        }
+    }
+
+    // Tìm kiếm sản phẩm theo tên
+    private static void timKiemSanPhamTheoTen(Scanner scanner, Map<Integer, String> map) {
+        System.out.print("Nhập tên sản phẩm cần tìm: ");
+        String keyword = scanner.nextLine().trim().toLowerCase();
+        boolean found = false;
+        for (Map.Entry<Integer, String> entry : map.entrySet()) {
+            if (entry.getValue().toLowerCase().contains(keyword)) {
+                System.out.println("Mã: " + entry.getKey() + " | Tên: " + entry.getValue());
+                found = true;
+            }
+        }
+        if (!found) {
+            System.out.println("(Không tìm thấy sản phẩm phù hợp)");
+        }
+    }
+
+    // Thống kê doanh thu và số lượng bán (có tính giá từ Product_Details.csv)
+    private static void thongKeDoanhThuVaSoLuongBan(String file, Map<Integer, String> map) {
+        // Đọc giá sản phẩm từ Product_Details.csv
+        Map<Integer, Long> priceMap = new HashMap<>();
+        try (BufferedReader br = new BufferedReader(new FileReader("Product_Details.csv"))) {
+            String line;
+            boolean isFirstLine = true;
+            while ((line = br.readLine()) != null) {
+                if (isFirstLine) { isFirstLine = false; continue; }
+                line = line.trim();
+                if (line.isEmpty()) continue;
+                String[] parts = line.split(",", 3);
+                if (parts.length < 3) continue;
+                try {
+                    int id = Integer.parseInt(parts[0].trim());
+                    String priceStr = parts[2].replaceAll("[^\\d]", "");
+                    long price = priceStr.isEmpty() ? 0 : Long.parseLong(priceStr);
+                    priceMap.put(id, price);
+                } catch (NumberFormatException ex) {}
+            }
+        } catch (IOException e) {
+            System.out.println("Lỗi đọc file Product_Details.csv: " + e.getMessage());
+            return;
+        }
+
+        // Đếm số lượng bán từng sản phẩm
+        Map<Integer, Integer> countMap = new HashMap<>();
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+                for (String blk : line.split("-1")) {
+                    blk = blk.trim();
+                    if (blk.isEmpty() || blk.contains("-2")) continue;
+                    for (String t : blk.split("\\s+")) {
+                        try {
+                            int code = Integer.parseInt(t);
+                            countMap.put(code, countMap.getOrDefault(code, 0) + 1);
+                        } catch (NumberFormatException ex) {}
+                    }
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("Lỗi đọc file lịch sử: " + e.getMessage());
+            return;
+        }
+
+        System.out.println("\n===== THỐNG KÊ SỐ LƯỢNG BÁN & DOANH THU =====");
+        if (countMap.isEmpty()) {
+            System.out.println("(Không có dữ liệu)");
+            return;
+        }
+        List<Map.Entry<Integer, Integer>> sorted = new ArrayList<>(countMap.entrySet());
+        sorted.sort((a, b) -> b.getValue() - a.getValue());
+        for (Map.Entry<Integer, Integer> entry : sorted) {
+            int id = entry.getKey();
+            String name = map.getOrDefault(id, "SP #" + id);
+            int count = entry.getValue();
+            long price = priceMap.getOrDefault(id, 0L);
+            long total = price * count;
+            String priceStr = price == 0 ? "?" : String.format("%,d đ", price).replace(',', '.');
+            String totalStr = price == 0 ? "?" : String.format("%,d đ", total).replace(',', '.');
+            System.out.printf("%-35s : %2d lần | Doanh thu : %s\n", name, count, totalStr);
         }
     }
 
