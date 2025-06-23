@@ -28,19 +28,21 @@ public class ProductCSVUtil {
     }
 
     // Đọc Online Retail.csv và xuất Product_Details.csv (STT, Product ID, Product Name)
-    public static void exportProductDetails(String onlineRetailCsv, String productDetailsCsv) {
+    public static void exportProductDetails(String onlineRetailCsv, String productDetailsCsv, int productIdIdx, int productNameIdx) {
         Map<String, String> productMap = new LinkedHashMap<>();
         try (BufferedReader br = new BufferedReader(new FileReader(onlineRetailCsv))) {
+            String headerLine = br.readLine();
+            if (headerLine == null) {
+                System.out.println("File không có dữ liệu.");
+                return;
+            }
+            String[] headerParts = headerLine.split(",");
             String line;
-            boolean isFirstLine = true;
             while ((line = br.readLine()) != null) {
-                if (isFirstLine) { isFirstLine = false; continue; }
-                String[] parts = line.split(",", 4);
-                if (parts.length < 3) continue;
-                String id = parts[1].trim();
-                String name = parts[2].trim();
-                // Chỉ lấy ID bắt đầu bằng số
-                if (!id.matches("^\\d.*")) continue;
+                String[] parts = line.split(",", headerParts.length);
+                if (parts.length <= Math.max(productIdIdx, productNameIdx)) continue;
+                String id = parts[productIdIdx].trim();
+                String name = parts[productNameIdx].trim();
                 if (!id.isEmpty() && !name.isEmpty()) {
                     productMap.put(id, name);
                 }
@@ -73,5 +75,4 @@ public class ProductCSVUtil {
         }
     }
 
-    
 }

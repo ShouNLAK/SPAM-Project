@@ -17,9 +17,47 @@ public class IntegratedSalesAssistant {
     private static int maxGap            = Integer.MAX_VALUE;
 
     public static void main(String[] args) {
-        ProductCSVUtil.exportProductDetails("Online Retail.csv", "Product_Details.csv");
+        String input = "Test.csv";
+        Scanner scanner = new Scanner(System.in);
+
+        // Hỏi người dùng về các chỉ số cột
+        int transactionIdIdx, productIdIdx, productNameIdx, customerIdIdx;
+        try (BufferedReader br = new BufferedReader(new FileReader(input))) {
+            String headerLine = br.readLine();
+            if (headerLine == null) {
+                System.out.println("File không có dữ liệu.");
+                return;
+            }
+            String[] headerParts = headerLine.split(",");
+            System.out.println("Các cột trong file:");
+            for (int i = 0; i < headerParts.length; i++) {
+                System.out.println("[" + i + "] " + headerParts[i]);
+            }
+            System.out.print("Nhập chỉ số cột Transaction ID: ");
+            transactionIdIdx = Integer.parseInt(scanner.nextLine().trim());
+            System.out.print("Nhập chỉ số cột Product ID: ");
+            productIdIdx = Integer.parseInt(scanner.nextLine().trim());
+            System.out.print("Nhập chỉ số cột Product Name: ");
+            productNameIdx = Integer.parseInt(scanner.nextLine().trim());
+            System.out.print("Nhập chỉ số cột Customer ID: ");
+            customerIdIdx = Integer.parseInt(scanner.nextLine().trim());
+        } catch (IOException e) {
+            System.out.println("Lỗi đọc file: " + e.getMessage());
+            return;
+        }
+
+        // Tạo file đã sort theo Transaction ID tăng dần
+        String sortedInput = "Test_sorted.csv";
+        sortInputByTransactionId(input, sortedInput, transactionIdIdx);
+
+        // Xuất Product_Details.csv từ file đã sort
+        ProductCSVUtil.exportProductDetails(sortedInput, "Product_Details.csv", productIdIdx, productNameIdx);
+
         try {
-        SalesTransactionUtil.processTransactions("Online Retail.csv", "sales_transactions.txt", "Product_Details.csv");
+            SalesTransactionUtil.processTransactions(
+                sortedInput, "sales_transactions.txt", "Product_Details.csv",
+                transactionIdIdx, productIdIdx, customerIdIdx
+            );
         } catch (Exception e) {
             System.out.println("Lỗi xử lý giao dịch: " + e.getMessage());
         };
@@ -42,7 +80,7 @@ public class IntegratedSalesAssistant {
         // Tạo productMapping tự động từ file sales_transactions.txt
         Map<Integer, String> productMapping = generateProductMappingFromFile("sales_transactions.txt");
 
-        Scanner scanner = new Scanner(System.in);
+        Scanner scanner2 = new Scanner(System.in);
         List<String> sessionHistory = new ArrayList<>();
 
         menu:
@@ -68,18 +106,18 @@ public class IntegratedSalesAssistant {
             System.out.println("|  0. Thoát chương trình                         |");
             System.out.println("==================================================");
             System.out.print("Nhập lựa chọn của bạn (0-10, -1): ");
-            String choice = scanner.nextLine().trim();
+            String choice = scanner2.nextLine().trim();
 
             switch (choice) {
                 case "1":
                     hienThiBangQuyDoi(productMapping);
                     break;
                 case "1.1":
-                    timKiemSanPhamTheoTen(scanner, productMapping);
+                    timKiemSanPhamTheoTen(scanner2, productMapping);
                     break;
                 case "2":
                     String newTrans = nhapPhienGiaoDich(
-                        scanner, productMapping, promotionPatterns, historicalFile
+                        scanner2, productMapping, promotionPatterns, historicalFile
                     );
                     break;
                 case "3":
@@ -94,7 +132,7 @@ public class IntegratedSalesAssistant {
                 case "5":
                     System.out.println("\n--- Đề xuất từ từng item con trong itemset ---");
                     System.out.print("Nhập giao dịch hiện tại (các mã cách nhau bằng dấu cách): ");
-                    List<Integer> curr = parseCodes(scanner.nextLine());
+                    List<Integer> curr = parseCodes(scanner2.nextLine());
                     deXuatTuItemsetCon(curr, patternFile, productMapping);
                     break;
                 case "6":
@@ -110,7 +148,7 @@ public class IntegratedSalesAssistant {
                 case "8":
                     System.out.println("\n--- Top-K Mẫu Tuần Tự ---");
                     System.out.print("Nhập K: ");
-                    int k = Integer.parseInt(scanner.nextLine().trim());
+                    int k = Integer.parseInt(scanner2.nextLine().trim());
                     hienThiTopK(patternFile, productMapping, k);
                     break;
                 case "9":
@@ -122,11 +160,11 @@ public class IntegratedSalesAssistant {
                 case "10":
                     System.out.println("\n----------- TRUY VẤN MẪU TUẦN TỰ -----------");
                     System.out.print("Nhập chuỗi mã sản phẩm (cách nhau bằng dấu cách): ");
-                    List<Integer> querySeq = parseCodes(scanner.nextLine());
+                    List<Integer> querySeq = parseCodes(scanner2.nextLine());
                     queryPatterns(patternFile, querySeq, productMapping);
                     break;
                 case "-1":
-                    optionMenu(scanner);
+                    optionMenu(scanner2);
                     // Sau khi chỉnh sửa, chạy lại SPAM với tham số mới
                     runSPAM(historicalFile, patternFile, minSupDefault, maxPatternLength, minPatternLength, maxGap);
                     // Đọc lại mẫu khuyến mãi
@@ -142,7 +180,7 @@ public class IntegratedSalesAssistant {
         System.out.println("\n--- Kết thúc chương trình ---");
         // Trước khi thoát, hiển thị toàn bộ lịch sử phiên
         hienThiLichSuPhien(sessionHistory, productMapping);
-        scanner.close();
+        scanner2.close();
     }
 
     // Chạy SPAM với tham số cho trước (bổ sung các tham số tuỳ chỉnh)
@@ -1428,4 +1466,29 @@ private static class PatternResult {
         this.support = support;
     }
 }
+    // Hàm sort file input theo Transaction ID tăng dần
+    private static void sortInputByTransactionId(String inputFile, String outputFile, int transactionIdIdx) {
+        List<String[]> rows = new ArrayList<>();
+        String header = "";
+        try (BufferedReader br = new BufferedReader(new FileReader(inputFile))) {
+            header = br.readLine();
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split(",", -1);
+                rows.add(parts);
+            }
+        } catch (IOException e) {
+            System.out.println("Lỗi đọc file để sort: " + e.getMessage());
+            return;
+        }
+        rows.sort(Comparator.comparing(a -> a[transactionIdIdx]));
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(outputFile))) {
+            bw.write(header + "\n");
+            for (String[] row : rows) {
+                bw.write(String.join(",", row) + "\n");
+            }
+        } catch (IOException e) {
+            System.out.println("Lỗi ghi file đã sort: " + e.getMessage());
+        }
+    }
 }

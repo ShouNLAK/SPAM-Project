@@ -5,7 +5,14 @@ import java.util.*;
 
 public class SalesTransactionUtil {
 
-    public static void processTransactions(String inputFile, String outputFile, String productDetailsCsv) throws IOException {
+    public static void processTransactions(
+        String inputFile,
+        String outputFile,
+        String productDetailsCsv,
+        int transactionIdIdx,
+        int productIdIdx,
+        int customerIdIdx
+    ) throws IOException {
         // Đọc ánh xạ ProductID -> STT
         Map<String, Integer> productIdToStt = loadProductIdToStt(productDetailsCsv);
 
@@ -22,15 +29,17 @@ public class SalesTransactionUtil {
             BufferedWriter bw = new BufferedWriter(new FileWriter(outputFile))
         ) {
             String header = br.readLine(); // skip header
+            if (header == null) throw new IOException("File không có dữ liệu.");
+            String[] headerParts = header.split(",");
             String line;
             while ((line = br.readLine()) != null) {
                 String[] parts = splitCsvLine(line);
-                if (parts.length < 7) continue;
-                String transactionID = parts[0].trim();
-                String productID = parts[1].trim();
-                String customerID = parts[6].trim();
+                if (parts.length <= Math.max(Math.max(productIdIdx, customerIdIdx), transactionIdIdx)) continue;
+                String transactionID = transactionIdIdx >= 0 ? parts[transactionIdIdx].trim() : "";
+                String productID = parts[productIdIdx].trim();
+                String customerID = parts[customerIdIdx].trim();
 
-                if (customerID.isEmpty() || transactionID.isEmpty() || productID.isEmpty()) continue;
+                if (customerID.isEmpty() || productID.isEmpty()) continue;
                 if (transactionID.startsWith("C")) continue; // skip credit notes
 
                 // Bỏ qua nếu productID không nằm trong Product_Details
@@ -43,8 +52,9 @@ public class SalesTransactionUtil {
                     }
                     lastCustomerID = customerID;
                 }
+                String transKey = transactionID.isEmpty() ? UUID.randomUUID().toString() : transactionID;
                 currentTransactions
-                    .computeIfAbsent(transactionID, k -> new TreeSet<>())
+                    .computeIfAbsent(transKey, k -> new TreeSet<>())
                     .add(productID);
             }
             if (!currentTransactions.isEmpty()) {
@@ -112,3 +122,4 @@ public class SalesTransactionUtil {
         return tokens.toArray(new String[0]);
     }
 }
+
